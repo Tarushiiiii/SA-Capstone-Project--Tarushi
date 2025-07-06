@@ -95,6 +95,7 @@ Each model outputs interactive **Bokeh plots** for pricing trends and lot utiliz
 ├── Model_3_SA_Capstone_Project.ipynb
 ├── model_3_sa_capstone_project.py
 ├── bokeh_plot_model-3.png
+├── project_report.pdf
 └── README.md
 ```
 
