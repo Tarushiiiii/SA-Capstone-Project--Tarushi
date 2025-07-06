@@ -21,10 +21,17 @@ This project presents a three-tiered solution for urban parking demand forecasti
 
 ### Architecture Flow
 
-#### **Model 1**
-#### **Model 2**
-#### **Model 3**
 #### **Combined**
+![image](https://github.com/user-attachments/assets/0a39ff1d-1bf7-4d2c-b534-a127ccec0329)
+
+#### **Model 1**
+![image](https://github.com/user-attachments/assets/978be946-c57a-4b07-bb73-8b524553c1b8)
+
+#### **Model 2**
+![image](https://github.com/user-attachments/assets/d138d5a5-c142-49e1-b386-77542c9c089c)
+
+#### **Model 3**
+![image](https://github.com/user-attachments/assets/66761ab2-4a64-4d1a-b473-236629868f02)
 
 ---
 
