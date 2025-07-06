@@ -31,7 +31,7 @@ This project presents a three-tiered solution for urban parking demand forecasti
 ![image](https://github.com/user-attachments/assets/d138d5a5-c142-49e1-b386-77542c9c089c)
 
 #### **Model 3**
-![image](https://github.com/user-attachments/assets/66761ab2-4a64-4d1a-b473-236629868f02)
+![image](https://github.com/user-attachments/assets/28828ab5-6d17-41da-bdef-2f0d2311a147)
 
 ---
 
