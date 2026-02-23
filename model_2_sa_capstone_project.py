@@ -39,37 +39,15 @@ df = df.sort_values('Timestamp').reset_index(drop=True)
 
 df
 
-df['VehicleType'].unique()
+df['VehicleType'] = df['VehicleType'].map({
+    "cycle": 1, "bike": 3, "car": 5, "truck": 7
+})
 
-def vtype(val):
-  if (val == 'cycle'):
-    return 1
-  elif (val == 'bike'):
-    return 3
-  elif (val == 'car'):
-    return 5
-  elif (val == 'truck'):
-    return 7
+df["TrafficConditionNearby"] = df["TrafficConditionNearby"].map({
+    "low": 1, "average": 5, "high": 9
+})
 
-df['VehicleType'] = df['VehicleType'].apply(vtype)
-
-def cong(val):
-  if (val == 'low'):
-    return 1
-  elif (val == 'average'):
-    return 5
-  elif (val == 'high'):
-    return 9
-
-df['TrafficConditionNearby'] = df['TrafficConditionNearby'].apply(cong)
-
-def flt(val):
-  if (val == 1):
-    return 1
-  elif (val == 0):
-    return 0
-
-df['IsSpecialDay'] = df['IsSpecialDay'].apply(flt)
+df["IsSpecialDay"] = df["IsSpecialDay"].astype(int)
 
 df
 
@@ -77,6 +55,51 @@ df
 
 ## Step - 1 (Preparation)
 """
+BASE_PRICE = 10
+
+df["Price"] = (
+    BASE_PRICE +
+    0.5 * BASE_PRICE * np.clip(
+        (
+            5 * (df["Occupancy"] / df["Capacity"]) +
+            0.8 * df["QueueLength"] -
+            0.6 * df["TrafficConditionNearby"] +
+            2.0 * df["IsSpecialDay"] +
+            1.2 * df["VehicleType"]
+        ) / 20,
+        0, 1
+    )
+)
+
+"""## Step - 2 (Training the Model)"""
+
+X = df[[
+    "Occupancy",
+    "QueueLength",
+    "TrafficConditionNearby",
+    "IsSpecialDay",
+    "VehicleType"
+]]
+
+y = df["Price"]
+
+# Train-test split
+from sklearn.model_selection import train_test_split
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size = 0.2, random_state = 42
+)
+
+"""## Step - 3 (Evaluation)"""
+
+preds = model.predict(X_test)
+print("MAE: ", mean_absolute_error(y_test, preds))
+print("RMSE: ", mean_squared_error(y_test, preds, squared=False))
+
+print("\nLearned Weights: ")
+print(pd.Series(model.coef_, index = X.columns))
+
+"""## Step - 4 (Deploy ML model in Pathway)"""
 
 class ParkingSchema2(pw.Schema):
     Timestamp: str   # Timestamp of the observation (should ideally be in ISO format)
@@ -89,7 +112,7 @@ class ParkingSchema2(pw.Schema):
 
 # Model-2 Demand-Based Price Function
 # Save the selected columns to a CSV file for streaming or downstream processing
-df2 = df[["Timestamp", "Occupancy", "Capacity", "IsSpecialDay", "VehicleType", "TrafficConditionNearby", "QueueLength" ]].to_csv("parking_stream.csv", index=False)
+df_stream = df[["Timestamp", "Occupancy", "Capacity", "IsSpecialDay", "VehicleType", "TrafficConditionNearby", "QueueLength" ]].to_csv("parking_stream.csv", index=False)
 data = pw.demo.replay_csv("parking_stream.csv", schema=ParkingSchema2, input_rate=1000)
 
 # Define the datetime format to parse the 'Timestamp' column
@@ -103,49 +126,23 @@ data_with_time = data.with_columns(
     day = data.Timestamp.dt.strptime(fmt).dt.strftime("%Y-%m-%dT00:00:00")
 )
 
-"""## Step - 2 (Demand-Based Price Function)"""
+# ML inference inside Pathway
 
-BASE_PRICE = 10
-ALPHA = 5
-BETA = 0.8
-GAMMA = 0.6
-DELTA = 2.0
-EPSILON = 1.2
-LAMBDA = 0.5  # Scaling factor for normalized demand
+@pw.udf
+def ml_price(o, p, t, s, v):
+    return float(model.predict([[o, q, t, s, v]])[0])
 
-# demand function
-data_with_demand = data_with_time.with_columns(
-    Demand = (
-        ALPHA * (data_with_time.Occupancy / data_with_time.Capacity) +
-        BETA * data_with_time.QueueLength -
-        GAMMA * data_with_time.TrafficConditionNearby +
-        DELTA * (data_with_time.IsSpecialDay) +
-        EPSILON * pw.this.VehicleType
+data = data.with_columns(
+    FinalPrice = ml_price(
+        pw.this.Occupancy, 
+        pw.this.QueueLength,
+        pw.this.TrafficConditionNearby,
+        pw.this.IsSpecialDay, 
+        pw.this.VehicleType
     )
 )
 
-@pw.udf
-def normalize_demand(raw_demand: float) -> float:
-    return min(max((raw_demand / 20), 0), 1)  # clipped to [0, 1]
-
-data_with_demand = data_with_demand.with_columns(
-    NormalizedDemand = normalize_demand(data_with_demand.Demand)
-)
-
-data_with_demand = data_with_demand.with_columns(
-    Price = pw.this.NormalizedDemand * LAMBDA * BASE_PRICE + BASE_PRICE
-)
-
-# Bound price between 0.5x and 2x base price
-@pw.udf
-def clamp_price(price: float) -> float:
-    return round(min(max(price, BASE_PRICE * 0.5), BASE_PRICE * 2.0), 2)
-
-data_with_demand = data_with_demand.with_columns(
-    FinalPrice = clamp_price(data_with_demand.Price)
-)
-
-"""## Step - 3 (Visualizaing)"""
+"""## Step - 5 (Visualizaing)"""
 
 # Activate the Panel extension to enable interactive visualizations
 pn.extension()
@@ -170,7 +167,7 @@ def price_plotter(source):
 # Use Pathway's built-in .plot() method to bind the data stream (data_with_demand) to the Bokeh plot
 # - 'price_plotter' is the rendering function
 # - 'sorting_col="t"' ensures the data is plotted in time order
-viz = data_with_demand.plot(price_plotter, sorting_col="t")
+viz = data.plot(price_plotter, sorting_col="t")
 
 # Create a Panel layout and make it servable as a web app
 # This line enables the interactive plot to be displayed when the app is served
