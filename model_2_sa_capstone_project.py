@@ -10,7 +10,7 @@ Original file is located at
 Installing required libraries and dependencies
 """
 
-!pip install pathway bokeh --quiet
+!pip install pathway bokeh scikit-learn --quiet
 
 import numpy as np
 import pandas as pd
@@ -20,6 +20,9 @@ from datetime import datetime
 import pathway as pw
 import bokeh.plotting
 import panel as pn
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 """# Step 1: Importing and Preprocessing the Data"""
 
@@ -53,7 +56,7 @@ df
 
 """# Model-2 (Demand-Based Price Function)
 
-## Step - 1 (Preparation)
+## Step - 2 (Preparation)
 """
 BASE_PRICE = 10
 
@@ -71,7 +74,7 @@ df["Price"] = (
     )
 )
 
-"""## Step - 2 (Training the Model)"""
+"""## Step - 3 (Training the Model)"""
 
 X = df[[
     "Occupancy",
@@ -84,13 +87,14 @@ X = df[[
 y = df["Price"]
 
 # Train-test split
-from sklearn.model_selection import train_test_split
-
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size = 0.2, random_state = 42
 )
 
-"""## Step - 3 (Evaluation)"""
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+"""## Step - 4 (Evaluation)"""
 
 preds = model.predict(X_test)
 print("MAE: ", mean_absolute_error(y_test, preds))
@@ -99,7 +103,7 @@ print("RMSE: ", mean_squared_error(y_test, preds, squared=False))
 print("\nLearned Weights: ")
 print(pd.Series(model.coef_, index = X.columns))
 
-"""## Step - 4 (Deploy ML model in Pathway)"""
+"""## Step - 5 (Deploy ML model in Pathway)"""
 
 class ParkingSchema2(pw.Schema):
     Timestamp: str   # Timestamp of the observation (should ideally be in ISO format)
@@ -123,14 +127,13 @@ fmt = "%Y-%m-%d %H:%M:%S"
 # - 'day' extracts the date part and resets the time to midnight (useful for day-level aggregations)
 data_with_time = data.with_columns(
     t = data.Timestamp.dt.strptime(fmt),
-    day = data.Timestamp.dt.strptime(fmt).dt.strftime("%Y-%m-%dT00:00:00")
 )
 
 # ML inference inside Pathway
 
 @pw.udf
 def ml_price(o, p, t, s, v):
-    return float(model.predict([[o, q, t, s, v]])[0])
+    return float(model.predict([[o, p, t, s, v]])[0])
 
 data = data.with_columns(
     FinalPrice = ml_price(
@@ -142,7 +145,7 @@ data = data.with_columns(
     )
 )
 
-"""## Step - 5 (Visualizaing)"""
+"""## Step - 6 (Visualizaing)"""
 
 # Activate the Panel extension to enable interactive visualizations
 pn.extension()
