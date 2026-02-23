@@ -145,10 +145,17 @@ data_with_time = data_with_time.with_columns(
 )
 
 #  Select Best Lot Per t
-recommendation = data_with_time.groupby(data_with_time.t).reduce(
-    Timestamp = pw.reducers.latest(data_with_time.t),
-    RecommendedLot = pw.reducers.argmax(data_with_time.Score, data_with_time.Coords),
-    Score = pw.reducers.max(data_with_time.Score)
+recommendation = (
+    data_with_time
+    .windowby(
+        pw.this.t,
+        window=pw.temporal.tumbling(datetime.timedelta(seconds=10))
+    )
+    .reduce(
+        Timestamp=pw.this._pw_window_end,
+        RecommendedLot=pw.reducers.argmax(pw.this.Score, pw.this.Coords),
+        Score=pw.reducers.max(pw.this.Score)
+    )
 )
 
 """## Step - 3 (Visualizing)"""
